@@ -59,13 +59,6 @@ export function TopBar({ sidebarCollapsed, onMenuClick }: TopBarProps) {
         </h2>
         <p className="text-xs text-surface-400">{pageInfo.subtitle}</p>
       </div>
-
-      <div className="ml-auto flex items-center gap-3">
-        {/* Future: notifications, user avatar, etc. */}
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-primary-400 to-primary-600 text-xs font-bold text-white shadow-sm">
-          U
-        </div>
-      </div>
     </header>
   );
 }
