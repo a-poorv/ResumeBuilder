@@ -40,9 +40,11 @@ ATS systems scan the WHOLE resume. Important overlapping terms must not live onl
 - Summary must read as someone applying to THIS specific job — grounded only in real experience.
 
 ## Bullet / project voice
-- One idea per line: strong verb + what you delivered + scope + measurable result when available.
+- Select the most JD-relevant bullets per role (typically 3–5). Drop impressive-but-irrelevant achievements for this application.
+- Each bullet: strong past-tense action verb (present tense only for current role), one idea, under ~30 words, no first person.
+- Prefer one quantified outcome when the master profile provides a number.
+- Ban filler without evidence: "results-driven", "team player", "passionate", etc.
 - Choose verbs and nouns that match THIS JD when resume evidence supports them.
-- Sound human — concise, factual, no fluff.
 
 ## Hard bans
 - NEVER end lines with soft-skill meta tags ("demonstrating ability…", "showcasing…", "highlighting capacity…", etc.).
@@ -57,6 +59,12 @@ ATS systems scan the WHOLE resume. Important overlapping terms must not live onl
 - Reorder skills to surface JD-overlapping skills first (only skills already on the resume).
 - Rewrite projects: description + highlights + technology order for ATS alignment when overlap is real.
 - Summary: 2–4 sentences angled to THIS job using real experience and key overlapping terms.
+- Section content order in the JSON: summary → skills → experience → projects → education → certifications.
+
+## Selection rules
+- From the full bullet inventory, keep only bullets relevant to THIS JD's responsibilities/keywords.
+- Prioritize bullets whose verbs/nouns overlap the JD keyword list.
+- You may recombine related facts from the same role into stronger bullets — still without inventing.
 
 ## notesForUser must include
 - Target lens used
@@ -238,13 +246,15 @@ function alignTailoredToOriginal(
 
   const alignedExperience = original.experience.map((originalJob, index) => {
     const tailoredJob = safe.experience[index];
-    const highlights = (tailoredJob?.highlights?.length
-      ? tailoredJob.highlights
-      : originalJob.highlights
-    ).map((highlight, highlightIndex) => {
-      const source = originalJob.highlights[highlightIndex] ?? originalJob.highlights[0] ?? "";
-      return scrubForcedJargon(highlight, source || highlight);
-    });
+    // Allow 3–5 selected bullets (not forced 1:1 with original count/order).
+    const selected =
+      tailoredJob?.highlights?.length
+        ? tailoredJob.highlights.slice(0, 6)
+        : originalJob.highlights;
+    const jobCorpus = originalJob.highlights.join(" ");
+    const highlights = selected.map((highlight) =>
+      scrubForcedJargon(highlight, jobCorpus || highlight)
+    );
 
     return {
       role: originalJob.role,
@@ -273,14 +283,18 @@ function alignTailoredToOriginal(
     );
 
     const sourceHighlights = originalProject.highlights ?? [];
+    const projectCorpus = [
+      sourceDescription,
+      ...sourceHighlights,
+      ...(originalProject.technologies ?? []),
+    ].join(" ");
     const tailoredHighlights =
       tailoredProject?.highlights?.length
-        ? tailoredProject.highlights
+        ? tailoredProject.highlights.slice(0, 6)
         : sourceHighlights;
-    const highlights = tailoredHighlights.map((highlight, highlightIndex) => {
-      const source = sourceHighlights[highlightIndex] ?? sourceHighlights[0] ?? "";
-      return scrubForcedJargon(highlight, source || highlight);
-    });
+    const highlights = tailoredHighlights.map((highlight) =>
+      scrubForcedJargon(highlight, projectCorpus || highlight)
+    );
 
     const originalTechSet = new Set(
       (originalProject.technologies ?? []).map((tech) => tech.toLowerCase())
@@ -333,7 +347,10 @@ function alignTailoredToOriginal(
   };
 }
 
-function buildUserPrompt(input: GenerateResumeRequest): string {
+function buildUserPrompt(
+  input: GenerateResumeRequest,
+  atsHints?: { mustPlace: string[]; gaps: string[] }
+): string {
   const targetRole =
     input.instructions?.targetRole ||
     input.jobDescription.jobTitle ||
@@ -341,46 +358,36 @@ function buildUserPrompt(input: GenerateResumeRequest): string {
 
   return [
     `This candidate is applying for: ${targetRole}`,
-    "Tailor for THIS application with ATS-aware contextual rewriting.",
-    "Weave overlapping JD skills/keywords into summary, experience, AND projects — only where resume evidence supports them.",
-    "No keyword stuffing. No soft-skill fluff. No invented experience.",
+    "Two-input tailor: INPUT A = Candidate Master Profile (ground truth). INPUT B = Extracted JD requirements.",
+    "Never invent metrics, tools, titles, or responsibilities missing from INPUT A. Flag gaps instead.",
+    "Weave overlapping JD vocabulary into summary + experience + skills + projects where INPUT A supports it.",
     "",
     "Process:",
-    "1) Infer target lens + ATS keyword set from the JD.",
-    "2) Map JD skills/keywords/responsibilities to real resume evidence (including projects).",
-    "3) Rewrite summary, experience bullets, skills order, and project descriptions/highlights so overlapping terms are ATS-visible.",
-    "4) List real gaps + ATS keywords placed in notesForUser.",
-    "5) Keep job titles and project names honest.",
+    "1) Use INPUT B lens + ATS keyword set.",
+    "2) Select the most relevant 3–5 bullets per role from INPUT A (drop irrelevant ones).",
+    "3) Rewrite selected content with JD vocabulary where factually accurate; preserve every number/scope.",
+    "4) Place every MUST-PLACE ATS term somewhere visible in the resume (summary/experience/skills/projects).",
+    "5) List gaps + ATS keywords placed in notesForUser. Do not fabricate GAP terms.",
     "",
-    "Voice rules:",
-    "- Write like a real person applying to this job.",
-    "- Ban endings like 'demonstrating ability…', 'showcasing…', 'highlighting capacity…'.",
-    "- Projects matter for ATS: if a project overlaps the JD, rewrite its description/highlights in JD language.",
-    "",
-    "=== TARGET ROLE (application) ===",
-    targetRole,
-    "",
-    "=== RESUME JSON ===",
+    "=== INPUT A — CANDIDATE MASTER PROFILE (immutable ground truth) ===",
     JSON.stringify(input.resume, null, 2),
     "",
-    "=== JOB DESCRIPTION JSON (source of truth for lens + ATS terms) ===",
+    "=== INPUT B — EXTRACTED JD REQUIREMENTS ===",
     JSON.stringify(input.jobDescription, null, 2),
+    "",
+    "=== ATS MUST-PLACE TERMS (evidence exists in master profile — must appear in tailored output) ===",
+    JSON.stringify(atsHints?.mustPlace ?? [], null, 2),
+    "",
+    "=== ATS GAP TERMS (no evidence — do NOT invent; list under notesForUser gaps) ===",
+    JSON.stringify(atsHints?.gaps ?? [], null, 2),
     "",
     "=== USER INSTRUCTIONS ===",
     JSON.stringify(input.instructions ?? {}, null, 2),
     "",
     "ATS / PROJECT EXAMPLE:",
-    "JD cares about: reporting exports, stakeholder updates, usage metrics.",
-    "Project originally: \"Built export APIs for dashboards using .NET.\"",
-    "GOOD rewrite: \"Built multi-format reporting export APIs (.NET) used in dashboards so stakeholders could track usage metrics without manual pulls.\"",
-    "",
-    "BAD (invents unsupported JD work):",
-    "\"Owned product roadmap and ran A/B tests…\"",
-    "GOOD: keep truthful work; put missing JD items under notesForUser gaps.",
-    "",
-    "BAD (soft-skill padding / glued jargon):",
-    '"…demonstrating ability to…" / "…applying principles similar to A/B testing…"',
-    "GOOD: action + real work + result in JD-aligned nouns.",
+    "MUST-PLACE includes reporting export + usage metrics; project evidence exists.",
+    "GOOD: \"Built multi-format reporting export APIs (.NET) used in dashboards so stakeholders could track usage metrics without manual pulls.\"",
+    "BAD: invent roadmap ownership / A/B testing when not in INPUT A.",
   ].join("\n");
 }
 
@@ -595,7 +602,8 @@ Some posts are one blob of prose with no headers. Still extract correctly.
   }
 
   async generateTailoredResume(
-    input: GenerateResumeRequest
+    input: GenerateResumeRequest,
+    atsHints?: { mustPlace: string[]; gaps: string[] }
   ): Promise<TailoredResumeContent> {
     const original = sanitizeParsedResume(input.resume);
 
@@ -603,9 +611,9 @@ Some posts are one blob of prose with no headers. Still extract correctly.
       temperature: 0.3,
       system: SYSTEM_PROMPT,
       user: [
-        buildUserPrompt({ ...input, resume: original }),
+        buildUserPrompt({ ...input, resume: original }, atsHints),
         "",
-        "Return JSON with this shape (same experience length/order as source):",
+        "Return JSON with this shape (same experience job count/order as source; bullets per role may be fewer if you selected the best ones):",
         JSON.stringify(
           {
             fullName: "string",
@@ -646,7 +654,7 @@ Some posts are one blob of prose with no headers. Still extract correctly.
             certifications: ["string"],
             highlightedSkills: ["string"],
             notesForUser: [
-              "Target lens: <derived from THIS JD title + responsibilities>",
+              "Target lens: ...",
               "Overlaps emphasized: ...",
               "ATS keywords placed: ...",
               "Real gaps vs this JD: ...",
@@ -667,6 +675,55 @@ Some posts are one blob of prose with no headers. Still extract correctly.
     }
 
     return alignTailoredToOriginal(original, parsed);
+  }
+
+  /**
+   * Second-pass ATS fix: place evidenced keywords that are still missing from the draft.
+   * Does not invent new experience — only rewrites existing content.
+   */
+  async improveAtsCoverage(input: {
+    original: ParsedResume;
+    tailored: TailoredResumeContent;
+    jobDescription: ParsedJobDescription;
+    missingMustPlace: string[];
+  }): Promise<TailoredResumeContent> {
+    if (input.missingMustPlace.length === 0) return input.tailored;
+
+    const content = await this.createJsonCompletion({
+      temperature: 0.2,
+      system: `You improve ATS keyword coverage on an already-tailored resume.
+Rules:
+- Only use facts from the Candidate Master Profile.
+- Naturally place each missing must-place term into summary, a relevant experience/project bullet, or skills — where evidence supports it.
+- Do not invent tools, metrics, or duties.
+- Keep companies, titles, dates, project names unchanged.
+- Keep writing human and ATS-friendly (no keyword dumps, no soft-skill fluff endings).
+- Return the full tailored resume JSON.`,
+      user: [
+        "=== CANDIDATE MASTER PROFILE ===",
+        JSON.stringify(input.original, null, 2),
+        "",
+        "=== CURRENT TAILORED DRAFT ===",
+        JSON.stringify(input.tailored, null, 2),
+        "",
+        "=== JD (context) ===",
+        JSON.stringify(input.jobDescription, null, 2),
+        "",
+        "=== MISSING MUST-PLACE TERMS (evidence exists in master profile) ===",
+        JSON.stringify(input.missingMustPlace, null, 2),
+        "",
+        "Return the full updated tailored resume JSON with the same shape as the draft (including notesForUser).",
+      ].join("\n"),
+    });
+
+    let parsed: TailoredResumeContent;
+    try {
+      parsed = JSON.parse(content) as TailoredResumeContent;
+    } catch {
+      return input.tailored;
+    }
+
+    return alignTailoredToOriginal(input.original, parsed);
   }
 }
 

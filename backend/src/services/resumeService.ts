@@ -12,6 +12,12 @@ import {
   fallbackParsedResumeFromText,
 } from "./resumeTextExtractor";
 import { historyStore } from "./historyStore";
+import {
+  classifyAtsTerms,
+  coverageAgainstTerms,
+  estimateMatchScore,
+  verifyGrounding,
+} from "./atsScoring";
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -81,107 +87,6 @@ export function validateGenerateResumeRequest(body: unknown): {
   };
 }
 
-function buildResumeCorpus(
-  resume: Pick<
-    ParsedResume,
-    "summary" | "skills" | "experience" | "projects" | "certifications"
-  >
-): string {
-  return [
-    resume.summary ?? "",
-    ...resume.skills,
-    ...resume.experience.flatMap((job) => [
-      job.role,
-      job.company,
-      job.subtitle ?? "",
-      ...job.highlights,
-    ]),
-    ...(resume.projects ?? []).flatMap((project) => [
-      project.name,
-      project.description ?? "",
-      ...(project.highlights ?? []),
-      ...(project.technologies ?? []),
-    ]),
-    ...(resume.certifications ?? []),
-  ]
-    .join(" ")
-    .toLowerCase();
-}
-
-function phraseFoundInCorpus(phrase: string, corpus: string): boolean {
-  const key = phrase.trim().toLowerCase();
-  if (!key) return false;
-  if (corpus.includes(key)) return true;
-
-  const tokens = key.split(/[^a-z0-9+#.]+/).filter((token) => token.length > 2);
-  if (tokens.length >= 2) {
-    return tokens.every((token) => corpus.includes(token));
-  }
-  return false;
-}
-
-/**
- * ATS-oriented match score against the FULL resume text (skills + bullets + projects),
- * weighted toward required skills and JD keywords.
- */
-function estimateMatchScore(
-  resume: Pick<
-    ParsedResume,
-    "summary" | "skills" | "experience" | "projects" | "certifications"
-  >,
-  jd: ParsedJobDescription
-): number | null {
-  const corpus = buildResumeCorpus(resume);
-  const weighted: Array<{ term: string; weight: number }> = [
-    ...jd.requiredSkills.map((term) => ({ term, weight: 3 })),
-    ...jd.preferredSkills.map((term) => ({ term, weight: 1.5 })),
-    ...jd.keywords.map((term) => ({ term, weight: 2 })),
-  ];
-
-  // Deduplicate by lowercase term, keep highest weight.
-  const byTerm = new Map<string, { term: string; weight: number }>();
-  for (const item of weighted) {
-    const key = item.term.trim().toLowerCase();
-    if (!key) continue;
-    const existing = byTerm.get(key);
-    if (!existing || item.weight > existing.weight) {
-      byTerm.set(key, item);
-    }
-  }
-
-  const terms = Array.from(byTerm.values());
-  if (terms.length === 0) return null;
-
-  let earned = 0;
-  let possible = 0;
-  for (const item of terms) {
-    possible += item.weight;
-    if (phraseFoundInCorpus(item.term, corpus)) {
-      earned += item.weight;
-    }
-  }
-
-  // Light bonus when responsibility themes appear in the corpus.
-  const responsibilityHits = jd.responsibilities.filter((item) => {
-    const tokens = item
-      .toLowerCase()
-      .split(/[^a-z0-9+#.]+/)
-      .filter((token) => token.length > 3)
-      .slice(0, 5);
-    if (tokens.length === 0) return false;
-    const hits = tokens.filter((token) => corpus.includes(token)).length;
-    return hits >= Math.min(2, tokens.length);
-  }).length;
-  if (jd.responsibilities.length > 0) {
-    const respWeight = 8;
-    possible += respWeight;
-    earned +=
-      (responsibilityHits / Math.max(jd.responsibilities.length, 1)) * respWeight;
-  }
-
-  return Math.round((earned / possible) * 100);
-}
-
 export class ResumeService {
   async processResumeUpload(file: Express.Multer.File) {
     const extractedText = await extractResumeText(file);
@@ -236,7 +141,64 @@ export class ResumeService {
     input: GenerateResumeRequest,
     clientId?: string
   ): Promise<TailoredResume> {
-    const tailoredContent = await groqService.generateTailoredResume(input);
+    const atsHints = classifyAtsTerms(input.resume, input.jobDescription);
+    const matchScoreBefore = estimateMatchScore(
+      input.resume,
+      input.jobDescription
+    );
+
+    let tailoredContent = await groqService.generateTailoredResume(
+      input,
+      atsHints
+    );
+
+    // Second pass: place evidenced ATS terms still missing from the draft.
+    const afterFirst = coverageAgainstTerms(
+      tailoredContent,
+      atsHints.mustPlace
+    );
+    if (afterFirst.missing.length > 0 && groqService.isConfigured()) {
+      try {
+        tailoredContent = await groqService.improveAtsCoverage({
+          original: input.resume,
+          tailored: tailoredContent,
+          jobDescription: input.jobDescription,
+          missingMustPlace: afterFirst.missing,
+        });
+      } catch (error) {
+        console.warn(
+          "ATS coverage pass failed; keeping first draft.",
+          error instanceof Error ? error.message : error
+        );
+      }
+    }
+
+    const finalCoverage = coverageAgainstTerms(
+      tailoredContent,
+      atsHints.mustPlace
+    );
+    const groundingNotes = verifyGrounding(input.resume, tailoredContent);
+    const gapNote =
+      atsHints.gaps.length > 0
+        ? `Gap flags (not invented): ${atsHints.gaps.slice(0, 12).join(", ")}`
+        : "Gap flags: none detected from JD term set.";
+    const coverageNote =
+      finalCoverage.missing.length > 0
+        ? `ATS must-place still weak: ${finalCoverage.missing
+            .slice(0, 8)
+            .join(", ")}`
+        : `ATS must-place coverage: ${finalCoverage.placed.length}/${atsHints.mustPlace.length} evidenced terms placed.`;
+
+    tailoredContent = {
+      ...tailoredContent,
+      notesForUser: [
+        ...tailoredContent.notesForUser,
+        coverageNote,
+        gapNote,
+        ...groundingNotes,
+      ],
+    };
+
     const targetRole =
       input.instructions?.targetRole ||
       input.jobDescription.jobTitle ||
@@ -245,7 +207,14 @@ export class ResumeService {
     const result: TailoredResume = {
       id: `tailored-${Date.now()}`,
       targetRole,
+      matchScoreBefore,
       matchScore: estimateMatchScore(tailoredContent, input.jobDescription),
+      atsCoverage: {
+        mustPlace: atsHints.mustPlace,
+        placed: finalCoverage.placed,
+        missing: finalCoverage.missing,
+        gaps: atsHints.gaps,
+      },
       source: "groq",
       tailoredContent,
       generatedAt: new Date().toISOString(),

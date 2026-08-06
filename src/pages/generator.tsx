@@ -190,6 +190,13 @@ export function GeneratorPage() {
               ) : (
                 <Badge variant="warning">Not generated yet</Badge>
               )}
+              {typeof tailoredResume?.matchScore === "number" && (
+                <Badge variant="secondary">
+                  {typeof tailoredResume.matchScoreBefore === "number"
+                    ? `${tailoredResume.matchScoreBefore}% → ${tailoredResume.matchScore}%`
+                    : `${tailoredResume.matchScore}% match`}
+                </Badge>
+              )}
               {decision === "accepted" && hasTailored && (
                 <Badge variant="success">Accepted</Badge>
               )}
@@ -358,6 +365,71 @@ export function GeneratorPage() {
 
       {hasTailored && (
         <>
+          {(typeof tailoredResume?.matchScore === "number" ||
+            tailoredResume?.atsCoverage) && (
+            <Card className="border-emerald-200 bg-emerald-50/40">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base text-surface-900">
+                  ATS match (before → after)
+                </CardTitle>
+                <CardDescription>
+                  Weighted keyword coverage against this JD. After score includes
+                  a second pass that places evidenced terms still missing from
+                  the first draft.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  {typeof tailoredResume?.matchScoreBefore === "number" ? (
+                    <Badge variant="secondary">
+                      Before {tailoredResume.matchScoreBefore}%
+                    </Badge>
+                  ) : null}
+                  {typeof tailoredResume?.matchScore === "number" ? (
+                    <Badge variant="success">
+                      After {tailoredResume.matchScore}%
+                    </Badge>
+                  ) : null}
+                  {typeof tailoredResume?.matchScoreBefore === "number" &&
+                  typeof tailoredResume?.matchScore === "number" &&
+                  tailoredResume.matchScore > tailoredResume.matchScoreBefore ? (
+                    <span className="text-sm text-emerald-800">
+                      +
+                      {tailoredResume.matchScore -
+                        tailoredResume.matchScoreBefore}{" "}
+                      pts
+                    </span>
+                  ) : null}
+                </div>
+                {tailoredResume?.atsCoverage ? (
+                  <div className="grid gap-2 text-sm text-surface-700 sm:grid-cols-2">
+                    <p>
+                      <span className="font-medium text-surface-800">
+                        Evidenced terms placed:{" "}
+                      </span>
+                      {tailoredResume.atsCoverage.placed.length}/
+                      {tailoredResume.atsCoverage.mustPlace.length}
+                    </p>
+                    <p>
+                      <span className="font-medium text-surface-800">
+                        True gaps (not invented):{" "}
+                      </span>
+                      {tailoredResume.atsCoverage.gaps.length}
+                    </p>
+                    {tailoredResume.atsCoverage.missing.length > 0 ? (
+                      <p className="sm:col-span-2 text-amber-900">
+                        Still weak:{" "}
+                        {tailoredResume.atsCoverage.missing
+                          .slice(0, 8)
+                          .join(", ")}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+              </CardContent>
+            </Card>
+          )}
+
           {tailoredResume?.tailoredContent?.notesForUser?.length ? (
             <Card className="border-amber-200 bg-amber-50/40">
               <CardHeader className="pb-2">

@@ -93,7 +93,15 @@ export interface TailoredResumeContent {
 export interface TailoredResume {
   id: string;
   targetRole: string;
+  /** ATS match on original (pre-tailor) resume corpus */
+  matchScoreBefore?: number | null;
   matchScore: number | null;
+  atsCoverage?: {
+    mustPlace: string[];
+    placed: string[];
+    missing: string[];
+    gaps: string[];
+  };
   source: "groq" | "mock";
   tailoredContent: TailoredResumeContent;
   generatedAt: string;
