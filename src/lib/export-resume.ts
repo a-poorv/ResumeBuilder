@@ -127,6 +127,24 @@ export async function downloadResumeDocx(resume: ResumePreviewData): Promise<voi
     }
   }
 
+  if ((resume.projects?.length ?? 0) > 0) {
+    children.push(sectionHeading("Projects"));
+    for (const project of resume.projects) {
+      children.push(
+        bodyParagraph(project.name, { bold: true, spacingBefore: 120 })
+      );
+      if (project.description) {
+        children.push(bodyParagraph(project.description));
+      }
+      if (project.technologies.length > 0) {
+        children.push(bodyParagraph(project.technologies.join(", ")));
+      }
+      for (const highlight of project.highlights) {
+        children.push(bulletParagraph(highlight));
+      }
+    }
+  }
+
   if (resume.education.length > 0) {
     children.push(sectionHeading("Education"));
     for (const edu of resume.education) {
@@ -253,6 +271,26 @@ export function downloadResumePdf(resume: ResumePreviewData): void {
         writeWrapped(`- ${highlight}`, { fontSize: 10, gapAfter: 2 });
       }
       y += 6;
+    }
+  }
+
+  if ((resume.projects?.length ?? 0) > 0) {
+    writeWrapped("PROJECTS", { fontSize: 11, bold: true, gapAfter: 6 });
+    for (const project of resume.projects) {
+      writeWrapped(project.name, { fontSize: 10, bold: true, gapAfter: 2 });
+      if (project.description) {
+        writeWrapped(project.description, { fontSize: 10, gapAfter: 2 });
+      }
+      if (project.technologies.length > 0) {
+        writeWrapped(project.technologies.join(", "), {
+          fontSize: 10,
+          gapAfter: 2,
+        });
+      }
+      for (const highlight of project.highlights) {
+        writeWrapped(`- ${highlight}`, { fontSize: 10, gapAfter: 2 });
+      }
+      y += 4;
     }
   }
 

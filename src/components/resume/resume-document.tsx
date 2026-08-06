@@ -198,6 +198,72 @@ export function ResumeDocument({
         </section>
       )}
 
+      {(resume.projects?.length ?? 0) > 0 && (
+        <section className="mt-5 space-y-4">
+          <SectionTitle>Projects</SectionTitle>
+          {resume.projects.map((project, projectIndex) => {
+            const compareProject = compareWith?.projects?.[projectIndex];
+            return (
+              <div key={`${project.name}-${projectIndex}`} className="space-y-1">
+                <Line
+                  highlightChanges={highlightChanges}
+                  changed={isChanged(project.name, compareProject?.name)}
+                >
+                  <p className="text-sm font-semibold text-surface-900">
+                    {project.name}
+                  </p>
+                </Line>
+                {project.description && (
+                  <Line
+                    highlightChanges={highlightChanges}
+                    changed={isChanged(
+                      project.description,
+                      compareProject?.description
+                    )}
+                  >
+                    <p className="text-sm leading-relaxed text-surface-700">
+                      {project.description}
+                    </p>
+                  </Line>
+                )}
+                {project.technologies.length > 0 && (
+                  <Line
+                    highlightChanges={highlightChanges}
+                    changed={
+                      project.technologies.join("|") !==
+                      (compareProject?.technologies ?? []).join("|")
+                    }
+                  >
+                    <p className="text-xs text-surface-500">
+                      {project.technologies.join(" · ")}
+                    </p>
+                  </Line>
+                )}
+                <ul className="space-y-1 pt-1">
+                  {project.highlights.map((highlight, highlightIndex) => (
+                    <li key={`${projectIndex}-h-${highlightIndex}`}>
+                      <Line
+                        highlightChanges={highlightChanges}
+                        changed={isChanged(
+                          highlight,
+                          compareProject?.highlights?.[highlightIndex]
+                        )}
+                        className="flex gap-2"
+                      >
+                        <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-surface-400" />
+                        <span className="text-sm leading-relaxed text-surface-700">
+                          {highlight}
+                        </span>
+                      </Line>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+        </section>
+      )}
+
       {resume.education.length > 0 && (
         <section className="mt-5 space-y-2">
           <SectionTitle>Education</SectionTitle>

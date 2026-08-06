@@ -16,6 +16,12 @@ export interface ResumePreviewData {
   summary: string;
   skills: string[];
   experience: ResumeExperience[];
+  projects: Array<{
+    name: string;
+    description?: string;
+    highlights: string[];
+    technologies: string[];
+  }>;
   education: Array<{
     degree: string;
     institution: string;
@@ -161,6 +167,21 @@ export function resumeToPlainText(resume: ResumePreviewData): string {
       lines.push(`- ${highlight}`);
     }
     lines.push("");
+  }
+
+  if ((resume.projects?.length ?? 0) > 0) {
+    lines.push("PROJECTS");
+    for (const project of resume.projects) {
+      lines.push(project.name);
+      if (project.description) lines.push(project.description);
+      if (project.technologies.length > 0) {
+        lines.push(project.technologies.join(", "));
+      }
+      for (const highlight of project.highlights) {
+        lines.push(`- ${highlight}`);
+      }
+      lines.push("");
+    }
   }
 
   lines.push("EDUCATION");

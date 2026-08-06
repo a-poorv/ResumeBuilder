@@ -13,64 +13,60 @@ const DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile";
 
 const SYSTEM_PROMPT = `You are an expert resume editor who writes like a hiring manager and ATS scanner expect — plain, concrete, human.
 
-EVERY generation is for a real job application. Always rewrite for THIS job's title, responsibilities, skills, and seniority — whatever domain it is (engineering, product, data, design, sales, marketing, operations, finance, support, etc.). Role-lens reframing is the default for all applications, not a special case.
+EVERY generation is for a real job application. Always rewrite for THIS job's title, responsibilities, skills, keywords, and seniority — whatever domain it is. Role-lens reframing is the default for all applications.
 
 NOT keyword stuffing. NOT soft-skill self-praise. NOT inventing experience.
 
 ## What "intelligent tailoring" means (every application)
-1. Read the target job: title + responsibilities + required/preferred skills + keywords + seniority. That defines the TARGET LENS.
-2. Read the candidate's real work: scope, outcomes, tools, domain already present on the resume.
-3. Map genuine overlaps between resume evidence and THIS JD's responsibilities.
+1. Read the target job: title + responsibilities + required/preferred skills + keywords + seniority. That defines the TARGET LENS and the ATS keyword set.
+2. Read the candidate's real work across summary, experience, skills, AND projects.
+3. Map genuine overlaps between resume evidence and THIS JD.
 4. Identify real gaps (JD asks for something the resume does not evidence).
-5. Reframe existing work in the language and priorities of THIS job so that hiring manager sees the fit — without inventing new duties.
-6. Put overlaps, gaps, and what you refused to invent in notesForUser.
+5. Rewrite so overlapping JD language appears naturally where the work already supports it — across summary, experience bullets, skills order, AND project descriptions/highlights.
+6. Put overlaps, gaps, ATS keywords placed, and what you refused to invent in notesForUser.
+
+## ATS readiness (critical — still honest)
+ATS systems scan the WHOLE resume. Important overlapping terms must not live only in Analysis notes.
+- When a JD skill/keyword/theme is already evidenced in the resume, surface that exact or near-exact wording in at least one visible place: summary, a relevant experience bullet, skills list, or a project description/highlight.
+- Prefer natural sentences over comma-stuffed keyword lists.
+- Distribute coverage: do not dump every keyword into one bullet.
+- PROJECTS are high-value for ATS: rewrite project description + highlights to mirror overlapping JD language when the project work supports it. Keep project names honest.
+- If a JD keyword has no resume evidence, do NOT force it in — list it under gaps in notesForUser.
 
 ## Role lens (always apply — any from → to)
-Whether the pivot is large (engineer → product) or small (backend eng → fullstack, analyst → data scientist, same title at a new company):
-- KEEP past job titles honest. Do not rename prior roles to match the target title.
+- KEEP past job titles and project names honest.
 - CHANGE the writing lens to match what THIS JD values most.
-  Examples of lenses (use the one that matches the JD, not a fixed list):
-  - Product: users, outcomes, adoption, retention, shipped impact, cross-functional delivery
-  - Engineering: systems, reliability, performance, scale, architecture, delivery quality
-  - Data: metrics, pipelines, insight quality, decision support, accuracy/latency
-  - Design: user problems, usability, research-informed decisions, craft, accessibility
-  - Sales/CS/ops/etc.: revenue, pipeline, customers, SLAs, process, efficiency — as evidenced
-- Lead with what the JD cares about; keep less-relevant detail as supporting context.
 - Reframe is allowed. Invention is not.
-  - Allowed: same facts, rewritten so a hiring manager for THIS role recognizes the overlap
-  - Forbidden: claiming responsibilities, tools, methods, or metrics that are not already evidenced on the resume
 - Summary must read as someone applying to THIS specific job — grounded only in real experience.
 
-## Bullet voice (critical — write like real resumes)
-- One idea per bullet: strong verb + what you delivered + scope / who benefited + measurable result when available.
-- Choose verbs and nouns that match THIS JD's responsibilities when the resume supports them.
-- Sound like a human wrote it for this application — concise, factual, no fluff.
-- Prefer concrete nouns from the work + THIS JD over personality claims.
+## Bullet / project voice
+- One idea per line: strong verb + what you delivered + scope + measurable result when available.
+- Choose verbs and nouns that match THIS JD when resume evidence supports them.
+- Sound human — concise, factual, no fluff.
 
-## Hard bans (never do these)
-- NEVER end bullets with soft-skill meta tags such as:
-  "demonstrating ability to…", "showcasing understanding of…", "highlighting capacity for…",
-  "proving expertise in…", "reflecting strong…", "underscoring commitment to…",
-  "exhibiting proficiency…", "illustrating ability…".
+## Hard bans
+- NEVER end lines with soft-skill meta tags ("demonstrating ability…", "showcasing…", "highlighting capacity…", etc.).
 - Do NOT glue missing JD keywords onto unrelated work.
 - Do NOT invent tools, metrics, stakeholders, methods, or responsibilities.
-- Do NOT change companies, job titles/roles, dates, project/subtitle lines, education, or certifications.
-- Do NOT reorder jobs. Same count, same order.
+- Do NOT change companies, job titles/roles, dates, education, or certifications.
+- Do NOT rename projects. Do NOT reorder jobs. Same experience count/order.
 - NEVER output the strings "null" or "undefined". Use "" when empty.
 
 ## How to rewrite well
-- Keep every original fact and metric. Sharpen verbs; reframe for THIS job's lens; do not inflate.
-- Reorder skills to surface skills that matter for THIS JD first (only skills already on the resume).
-- Summary: 2–4 sentences angled to THIS job using real experience — no soft-skill padding.
+- Keep every original fact and metric. Sharpen verbs; reframe for THIS job; weave overlapping ATS terms where truthful.
+- Reorder skills to surface JD-overlapping skills first (only skills already on the resume).
+- Rewrite projects: description + highlights + technology order for ATS alignment when overlap is real.
+- Summary: 2–4 sentences angled to THIS job using real experience and key overlapping terms.
 
-## notesForUser must include (gap analysis for every application)
-- Target lens used (e.g. "Aligned writing to Data Analyst JD priorities: SQL, reporting, stakeholder-ready insights")
-- Overlaps emphasized (which JD responsibilities mapped to which real evidence)
-- Real gaps vs THIS JD — actionable and specific
+## notesForUser must include
+- Target lens used
+- Overlaps emphasized (JD → resume evidence)
+- ATS keywords placed in the tailored resume (list them)
+- Real gaps vs THIS JD
 - What you refused to invent
 
-## Quality check before answering
-Reject any bullet that: (a) invents duties not in the resume, (b) glues JD jargon onto unrelated work, OR (c) ends with showcasing/demonstrating fluff. Every bullet = real work, rewritten for THIS job's lens + result.`;
+## Quality check
+Reject any line that invents duties, glues unsupported JD jargon, or ends with showcasing/demonstrating fluff. Every line = real work, rewritten for THIS job + ATS-visible overlap where earned.`;
 
 function cleanText(value: unknown): string {
   if (value == null) return "";
@@ -185,6 +181,12 @@ function alignTailoredToOriginal(
       job.subtitle ?? "",
       ...job.highlights,
     ]),
+    ...(original.projects ?? []).flatMap((project) => [
+      project.name,
+      project.description ?? "",
+      ...(project.highlights ?? []),
+      ...(project.technologies ?? []),
+    ]),
     ...(original.certifications ?? []),
   ]
     .join(" ")
@@ -261,6 +263,46 @@ function alignTailoredToOriginal(
     originalSkillSet.has(skill.toLowerCase())
   );
 
+  const originalProjects = original.projects ?? [];
+  const alignedProjects = originalProjects.map((originalProject, index) => {
+    const tailoredProject = safe.projects?.[index];
+    const sourceDescription = originalProject.description ?? "";
+    const description = scrubForcedJargon(
+      cleanText(tailoredProject?.description) || sourceDescription,
+      sourceDescription
+    );
+
+    const sourceHighlights = originalProject.highlights ?? [];
+    const tailoredHighlights =
+      tailoredProject?.highlights?.length
+        ? tailoredProject.highlights
+        : sourceHighlights;
+    const highlights = tailoredHighlights.map((highlight, highlightIndex) => {
+      const source = sourceHighlights[highlightIndex] ?? sourceHighlights[0] ?? "";
+      return scrubForcedJargon(highlight, source || highlight);
+    });
+
+    const originalTechSet = new Set(
+      (originalProject.technologies ?? []).map((tech) => tech.toLowerCase())
+    );
+    const techPool = new Set([
+      ...originalTechSet,
+      ...[...originalSkillSet],
+    ]);
+    const technologies = cleanStringArray(tailoredProject?.technologies).filter(
+      (tech) => techPool.has(tech.toLowerCase())
+    );
+
+    return {
+      name: originalProject.name,
+      description: description || undefined,
+      highlights,
+      technologies: technologies.length
+        ? technologies
+        : originalProject.technologies ?? [],
+    };
+  });
+
   return {
     fullName: cleanText(safe.fullName) || original.fullName,
     email: cleanText(safe.email) || original.email,
@@ -277,10 +319,9 @@ function alignTailoredToOriginal(
       safe.education && safe.education.length > 0
         ? safe.education
         : original.education ?? [],
-    projects:
-      safe.projects && safe.projects.length > 0
-        ? safe.projects
-        : original.projects ?? [],
+    projects: alignedProjects.length
+      ? alignedProjects
+      : original.projects ?? [],
     certifications:
       safe.certifications && safe.certifications.length > 0
         ? safe.certifications
@@ -300,20 +341,21 @@ function buildUserPrompt(input: GenerateResumeRequest): string {
 
   return [
     `This candidate is applying for: ${targetRole}`,
-    "Tailor the resume for THIS job application — every time, for any role/domain.",
-    "Use role-lens reframing from the JD (not a fixed playbook). No keyword stuffing. No soft-skill fluff. No invented experience.",
+    "Tailor for THIS application with ATS-aware contextual rewriting.",
+    "Weave overlapping JD skills/keywords into summary, experience, AND projects — only where resume evidence supports them.",
+    "No keyword stuffing. No soft-skill fluff. No invented experience.",
     "",
     "Process:",
-    "1) From the JD, infer what THIS hiring manager values (the target lens).",
-    "2) Map JD responsibilities/skills to real resume evidence (overlaps).",
-    "3) List real gaps in notesForUser (candidate gap analysis for this application).",
-    "4) Rewrite summary + bullets in THIS job's language using only real facts.",
-    "5) Keep past job titles honest. Never invent missing tools, methods, or ownership.",
+    "1) Infer target lens + ATS keyword set from the JD.",
+    "2) Map JD skills/keywords/responsibilities to real resume evidence (including projects).",
+    "3) Rewrite summary, experience bullets, skills order, and project descriptions/highlights so overlapping terms are ATS-visible.",
+    "4) List real gaps + ATS keywords placed in notesForUser.",
+    "5) Keep job titles and project names honest.",
     "",
     "Voice rules:",
-    "- Write like a real person applying to this specific job.",
+    "- Write like a real person applying to this job.",
     "- Ban endings like 'demonstrating ability…', 'showcasing…', 'highlighting capacity…'.",
-    "- Lead with what THIS JD cares about; demote less-relevant detail to support.",
+    "- Projects matter for ATS: if a project overlaps the JD, rewrite its description/highlights in JD language.",
     "",
     "=== TARGET ROLE (application) ===",
     targetRole,
@@ -321,35 +363,24 @@ function buildUserPrompt(input: GenerateResumeRequest): string {
     "=== RESUME JSON ===",
     JSON.stringify(input.resume, null, 2),
     "",
-    "=== JOB DESCRIPTION JSON (source of truth for lens) ===",
+    "=== JOB DESCRIPTION JSON (source of truth for lens + ATS terms) ===",
     JSON.stringify(input.jobDescription, null, 2),
     "",
     "=== USER INSTRUCTIONS ===",
     JSON.stringify(input.instructions ?? {}, null, 2),
     "",
-    "GENERAL RULE EXAMPLES (apply the same idea to ANY from→to):",
+    "ATS / PROJECT EXAMPLE:",
+    "JD cares about: reporting exports, stakeholder updates, usage metrics.",
+    "Project originally: \"Built export APIs for dashboards using .NET.\"",
+    "GOOD rewrite: \"Built multi-format reporting export APIs (.NET) used in dashboards so stakeholders could track usage metrics without manual pulls.\"",
     "",
-    "If JD is product-oriented and resume is engineering-heavy:",
-    "BAD:  \"Developed a high-scale analytics platform using Angular 17+ and .NET 8.\"",
-    "GOOD: \"Shipped a high-scale analytics platform (Angular 17+, .NET 8) that helped teams cut reporting query times to under 3 seconds.\"",
+    "BAD (invents unsupported JD work):",
+    "\"Owned product roadmap and ran A/B tests…\"",
+    "GOOD: keep truthful work; put missing JD items under notesForUser gaps.",
     "",
-    "If JD is engineering-oriented and resume is already technical:",
-    "BAD:  vague soft claims or product buzzwords with no systems detail",
-    "GOOD: keep systems/performance/reliability front; align nouns to THIS JD's stack/responsibilities when evidenced",
-    "",
-    "If JD asks for work the resume does not show:",
-    "BAD:  invent it into a bullet",
-    "GOOD: keep the bullet truthful; list the missing requirement under notesForUser gaps",
-    "",
-    "BAD (soft-skill padding):",
-    '"Improved system stability by 45%…, demonstrating ability to analyze and resolve complex issues."',
-    "GOOD:",
-    '"Improved system stability by 45% by reducing production incidents through root-cause analysis and targeted fixes."',
-    "",
-    "BAD (glued JD jargon onto unrelated work):",
-    '"Built 15+ reusable Angular widgets, applying principles similar to A/B testing for optimization"',
-    "GOOD (same facts, outcome language when supported):",
-    '"Cut feature delivery time 30% by shipping a library of 15+ reusable UI components adopted across product workflows"',
+    "BAD (soft-skill padding / glued jargon):",
+    '"…demonstrating ability to…" / "…applying principles similar to A/B testing…"',
+    "GOOD: action + real work + result in JD-aligned nouns.",
   ].join("\n");
 }
 
@@ -617,6 +648,7 @@ Some posts are one blob of prose with no headers. Still extract correctly.
             notesForUser: [
               "Target lens: <derived from THIS JD title + responsibilities>",
               "Overlaps emphasized: ...",
+              "ATS keywords placed: ...",
               "Real gaps vs this JD: ...",
               "Did not invent: ...",
             ],

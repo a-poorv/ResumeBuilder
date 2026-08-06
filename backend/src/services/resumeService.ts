@@ -81,19 +81,105 @@ export function validateGenerateResumeRequest(body: unknown): {
   };
 }
 
+function buildResumeCorpus(
+  resume: Pick<
+    ParsedResume,
+    "summary" | "skills" | "experience" | "projects" | "certifications"
+  >
+): string {
+  return [
+    resume.summary ?? "",
+    ...resume.skills,
+    ...resume.experience.flatMap((job) => [
+      job.role,
+      job.company,
+      job.subtitle ?? "",
+      ...job.highlights,
+    ]),
+    ...(resume.projects ?? []).flatMap((project) => [
+      project.name,
+      project.description ?? "",
+      ...(project.highlights ?? []),
+      ...(project.technologies ?? []),
+    ]),
+    ...(resume.certifications ?? []),
+  ]
+    .join(" ")
+    .toLowerCase();
+}
+
+function phraseFoundInCorpus(phrase: string, corpus: string): boolean {
+  const key = phrase.trim().toLowerCase();
+  if (!key) return false;
+  if (corpus.includes(key)) return true;
+
+  const tokens = key.split(/[^a-z0-9+#.]+/).filter((token) => token.length > 2);
+  if (tokens.length >= 2) {
+    return tokens.every((token) => corpus.includes(token));
+  }
+  return false;
+}
+
+/**
+ * ATS-oriented match score against the FULL resume text (skills + bullets + projects),
+ * weighted toward required skills and JD keywords.
+ */
 function estimateMatchScore(
-  resume: ParsedResume,
+  resume: Pick<
+    ParsedResume,
+    "summary" | "skills" | "experience" | "projects" | "certifications"
+  >,
   jd: ParsedJobDescription
 ): number | null {
-  const resumeSkills = new Set(resume.skills.map((skill) => skill.toLowerCase()));
-  const targetSkills = [...jd.requiredSkills, ...jd.preferredSkills];
-  if (targetSkills.length === 0) return null;
+  const corpus = buildResumeCorpus(resume);
+  const weighted: Array<{ term: string; weight: number }> = [
+    ...jd.requiredSkills.map((term) => ({ term, weight: 3 })),
+    ...jd.preferredSkills.map((term) => ({ term, weight: 1.5 })),
+    ...jd.keywords.map((term) => ({ term, weight: 2 })),
+  ];
 
-  const matches = targetSkills.filter((skill) =>
-    resumeSkills.has(skill.toLowerCase())
-  ).length;
+  // Deduplicate by lowercase term, keep highest weight.
+  const byTerm = new Map<string, { term: string; weight: number }>();
+  for (const item of weighted) {
+    const key = item.term.trim().toLowerCase();
+    if (!key) continue;
+    const existing = byTerm.get(key);
+    if (!existing || item.weight > existing.weight) {
+      byTerm.set(key, item);
+    }
+  }
 
-  return Math.round((matches / targetSkills.length) * 100);
+  const terms = Array.from(byTerm.values());
+  if (terms.length === 0) return null;
+
+  let earned = 0;
+  let possible = 0;
+  for (const item of terms) {
+    possible += item.weight;
+    if (phraseFoundInCorpus(item.term, corpus)) {
+      earned += item.weight;
+    }
+  }
+
+  // Light bonus when responsibility themes appear in the corpus.
+  const responsibilityHits = jd.responsibilities.filter((item) => {
+    const tokens = item
+      .toLowerCase()
+      .split(/[^a-z0-9+#.]+/)
+      .filter((token) => token.length > 3)
+      .slice(0, 5);
+    if (tokens.length === 0) return false;
+    const hits = tokens.filter((token) => corpus.includes(token)).length;
+    return hits >= Math.min(2, tokens.length);
+  }).length;
+  if (jd.responsibilities.length > 0) {
+    const respWeight = 8;
+    possible += respWeight;
+    earned +=
+      (responsibilityHits / Math.max(jd.responsibilities.length, 1)) * respWeight;
+  }
+
+  return Math.round((earned / possible) * 100);
 }
 
 export class ResumeService {
@@ -159,7 +245,7 @@ export class ResumeService {
     const result: TailoredResume = {
       id: `tailored-${Date.now()}`,
       targetRole,
-      matchScore: estimateMatchScore(input.resume, input.jobDescription),
+      matchScore: estimateMatchScore(tailoredContent, input.jobDescription),
       source: "groq",
       tailoredContent,
       generatedAt: new Date().toISOString(),

@@ -33,6 +33,14 @@ export function parsedResumeToPreview(resume: ParsedResume): ResumePreviewData {
       duration: formatDuration(job.startDate, job.endDate),
       highlights: (job.highlights ?? []).map(cleanDisplayText).filter(Boolean),
     })),
+    projects: (resume.projects ?? []).map((project) => ({
+      name: cleanDisplayText(project.name),
+      description: cleanDisplayText(project.description) || undefined,
+      highlights: (project.highlights ?? []).map(cleanDisplayText).filter(Boolean),
+      technologies: (project.technologies ?? [])
+        .map(cleanDisplayText)
+        .filter(Boolean),
+    })),
     education: (resume.education ?? []).map((edu) => ({
       degree: cleanDisplayText(edu.degree),
       institution: cleanDisplayText(edu.institution),
