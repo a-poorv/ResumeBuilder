@@ -28,7 +28,11 @@ app.use(
         callback(null, true);
         return;
       }
-      if (origins.includes(origin) || origins.includes("*")) {
+      if (
+        origins.includes(origin) ||
+        origins.includes("*") ||
+        /\.vercel\.app$/i.test(origin)
+      ) {
         callback(null, true);
         return;
       }
