@@ -190,13 +190,15 @@ export function GeneratorPage() {
               ) : (
                 <Badge variant="warning">Not generated yet</Badge>
               )}
-              {typeof tailoredResume?.matchScore === "number" && (
-                <Badge variant="secondary">
-                  {typeof tailoredResume.matchScoreBefore === "number"
-                    ? `${tailoredResume.matchScoreBefore}% → ${tailoredResume.matchScore}%`
-                    : `${tailoredResume.matchScore}% match`}
+              {typeof tailoredResume?.placementAfter === "number" ? (
+                <Badge variant="success">
+                  Keywords placed {tailoredResume.placementAfter}%
                 </Badge>
-              )}
+              ) : typeof tailoredResume?.matchScore === "number" ? (
+                <Badge variant="secondary">
+                  JD fit {tailoredResume.matchScore}%
+                </Badge>
+              ) : null}
               {decision === "accepted" && hasTailored && (
                 <Badge variant="success">Accepted</Badge>
               )}
@@ -370,61 +372,110 @@ export function GeneratorPage() {
             <Card className="border-emerald-200 bg-emerald-50/40">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base text-surface-900">
-                  ATS match (before → after)
+                  ATS keyword placement & JD fit
                 </CardTitle>
                 <CardDescription>
-                  Weighted keyword coverage against this JD. After score includes
-                  a second pass that places evidenced terms still missing from
-                  the first draft.
+                  Tailoring can only surface skills already on your resume. It
+                  will not invent missing requirements — that would fake an ATS
+                  score.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex flex-wrap items-center gap-3">
-                  {typeof tailoredResume?.matchScoreBefore === "number" ? (
-                    <Badge variant="secondary">
-                      Before {tailoredResume.matchScoreBefore}%
-                    </Badge>
-                  ) : null}
-                  {typeof tailoredResume?.matchScore === "number" ? (
-                    <Badge variant="success">
-                      After {tailoredResume.matchScore}%
-                    </Badge>
-                  ) : null}
-                  {typeof tailoredResume?.matchScoreBefore === "number" &&
-                  typeof tailoredResume?.matchScore === "number" &&
-                  tailoredResume.matchScore > tailoredResume.matchScoreBefore ? (
-                    <span className="text-sm text-emerald-800">
-                      +
-                      {tailoredResume.matchScore -
-                        tailoredResume.matchScoreBefore}{" "}
-                      pts
-                    </span>
-                  ) : null}
-                </div>
-                {tailoredResume?.atsCoverage ? (
-                  <div className="grid gap-2 text-sm text-surface-700 sm:grid-cols-2">
-                    <p>
-                      <span className="font-medium text-surface-800">
-                        Evidenced terms placed:{" "}
+              <CardContent className="space-y-4">
+                <div className="rounded-lg border border-emerald-200/80 bg-white/70 px-4 py-3">
+                  <p className="text-xs font-medium uppercase tracking-wide text-surface-500">
+                    What we improved (your real overlaps)
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-3">
+                    {typeof tailoredResume?.placementBefore === "number" ? (
+                      <Badge variant="secondary">
+                        Before {tailoredResume.placementBefore}%
+                      </Badge>
+                    ) : null}
+                    {typeof tailoredResume?.placementAfter === "number" ? (
+                      <Badge variant="success">
+                        After {tailoredResume.placementAfter}%
+                      </Badge>
+                    ) : null}
+                    {typeof tailoredResume?.placementBefore === "number" &&
+                    typeof tailoredResume?.placementAfter === "number" &&
+                    tailoredResume.placementAfter >
+                      tailoredResume.placementBefore ? (
+                      <span className="text-sm text-emerald-800">
+                        +
+                        {tailoredResume.placementAfter -
+                          tailoredResume.placementBefore}{" "}
+                        pts placement
                       </span>
-                      {tailoredResume.atsCoverage.placed.length}/
-                      {tailoredResume.atsCoverage.mustPlace.length}
-                    </p>
-                    <p>
-                      <span className="font-medium text-surface-800">
-                        True gaps (not invented):{" "}
+                    ) : typeof tailoredResume?.placementAfter === "number" &&
+                      tailoredResume.placementAfter === 100 ? (
+                      <span className="text-sm text-emerald-800">
+                        All evidenced keywords are now ATS-visible
                       </span>
-                      {tailoredResume.atsCoverage.gaps.length}
-                    </p>
-                    {tailoredResume.atsCoverage.missing.length > 0 ? (
-                      <p className="sm:col-span-2 text-amber-900">
-                        Still weak:{" "}
-                        {tailoredResume.atsCoverage.missing
-                          .slice(0, 8)
-                          .join(", ")}
-                      </p>
                     ) : null}
                   </div>
+                  {tailoredResume?.atsCoverage ? (
+                    <p className="mt-2 text-sm text-surface-700">
+                      Placed{" "}
+                      <span className="font-medium text-surface-900">
+                        {tailoredResume.atsCoverage.placed.length}/
+                        {tailoredResume.atsCoverage.mustPlace.length}
+                      </span>{" "}
+                      JD terms that already exist in your experience.
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="rounded-lg border border-surface-200 bg-white/70 px-4 py-3">
+                  <p className="text-xs font-medium uppercase tracking-wide text-surface-500">
+                    Honest overall JD keyword fit
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-3">
+                    {typeof tailoredResume?.matchScore === "number" ? (
+                      <Badge variant="secondary">
+                        Fit {tailoredResume.matchScore}%
+                      </Badge>
+                    ) : null}
+                    {typeof tailoredResume?.fitCeiling === "number" ? (
+                      <Badge variant="secondary">
+                        Ceiling ~{tailoredResume.fitCeiling}%
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <p className="mt-2 text-sm text-surface-700">
+                    {tailoredResume?.atsCoverage &&
+                    tailoredResume.atsCoverage.gaps.length > 0 ? (
+                      <>
+                        This JD asks for{" "}
+                        <span className="font-medium text-surface-900">
+                          {tailoredResume.atsCoverage.gaps.length} requirements
+                        </span>{" "}
+                        not evidenced on your resume. We flagged them instead of
+                        inventing them — so overall fit stays low until you add
+                        real experience (or pick a closer JD).
+                      </>
+                    ) : (
+                      <>
+                        Overall fit is based on JD keywords found in your
+                        content. The ceiling is the best honest score without
+                        fabricating gaps.
+                      </>
+                    )}
+                  </p>
+                  {typeof tailoredResume?.fitCeiling === "number" &&
+                  tailoredResume.fitCeiling < 50 ? (
+                    <p className="mt-2 text-sm text-amber-900">
+                      Shortlist odds for this JD look weak on keywords alone.
+                      Prefer roles closer to your stack, or add proven
+                      experience for the gap list below.
+                    </p>
+                  ) : null}
+                </div>
+
+                {tailoredResume?.atsCoverage?.missing?.length ? (
+                  <p className="text-sm text-amber-900">
+                    Still weak to place:{" "}
+                    {tailoredResume.atsCoverage.missing.slice(0, 8).join(", ")}
+                  </p>
                 ) : null}
               </CardContent>
             </Card>

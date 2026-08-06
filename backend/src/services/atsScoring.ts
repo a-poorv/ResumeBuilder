@@ -4,12 +4,12 @@ import {
   TailoredResumeContent,
 } from "../types";
 
-export function buildResumeCorpus(
-  resume: Pick<
-    ParsedResume | TailoredResumeContent,
-    "summary" | "skills" | "experience" | "projects" | "certifications"
-  >
-): string {
+export type ResumeCorpusSource = Pick<
+  ParsedResume | TailoredResumeContent,
+  "summary" | "skills" | "experience" | "projects" | "certifications"
+>;
+
+export function buildResumeCorpus(resume: ResumeCorpusSource): string {
   return [
     resume.summary ?? "",
     ...resume.skills,
@@ -31,14 +31,39 @@ export function buildResumeCorpus(
     .toLowerCase();
 }
 
+/**
+ * Prefer exact/near-exact phrase hits. Multi-token soft match only when
+ * every meaningful token appears (avoids rewarding long noisy originals).
+ */
 export function phraseFoundInCorpus(phrase: string, corpus: string): boolean {
   const key = phrase.trim().toLowerCase();
   if (!key) return false;
   if (corpus.includes(key)) return true;
 
+  // Common ATS aliases
+  const aliases: Record<string, string[]> = {
+    "node.js": ["nodejs", "node js"],
+    nodejs: ["node.js", "node js"],
+    "ci/cd": ["cicd", "ci cd"],
+    "rest apis": ["rest api", "restful api", "restful apis"],
+    "rest api": ["rest apis", "restful api"],
+  };
+  for (const alias of aliases[key] ?? []) {
+    if (corpus.includes(alias)) return true;
+  }
+
   const tokens = key.split(/[^a-z0-9+#.]+/).filter((token) => token.length > 2);
   if (tokens.length >= 2) {
     return tokens.every((token) => corpus.includes(token));
+  }
+  // Single short tokens (e.g. "sql", "aws") — whole-word-ish check
+  if (tokens.length === 1) {
+    const token = tokens[0];
+    const re = new RegExp(
+      `(^|[^a-z0-9+#.])${token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9+#.]|$)`,
+      "i"
+    );
+    return re.test(corpus);
   }
   return false;
 }
@@ -56,7 +81,6 @@ export function collectJdTerms(jd: ParsedJobDescription): string[] {
   return out;
 }
 
-/** Split JD terms into those evidenced in the master resume vs true gaps. */
 export function classifyAtsTerms(
   resume: ParsedResume,
   jd: ParsedJobDescription
@@ -71,17 +95,9 @@ export function classifyAtsTerms(
   return { mustPlace, gaps };
 }
 
-/**
- * ATS match against full resume text, weighted toward required skills + keywords.
- */
-export function estimateMatchScore(
-  resume: Pick<
-    ParsedResume | TailoredResumeContent,
-    "summary" | "skills" | "experience" | "projects" | "certifications"
-  >,
+function weightedJdTerms(
   jd: ParsedJobDescription
-): number | null {
-  const corpus = buildResumeCorpus(resume);
+): Array<{ term: string; weight: number }> {
   const weighted: Array<{ term: string; weight: number }> = [
     ...jd.requiredSkills.map((term) => ({ term, weight: 3 })),
     ...jd.preferredSkills.map((term) => ({ term, weight: 1.5 })),
@@ -97,10 +113,21 @@ export function estimateMatchScore(
       byTerm.set(key, item);
     }
   }
+  return Array.from(byTerm.values());
+}
 
-  const terms = Array.from(byTerm.values());
+/**
+ * Honest JD keyword fit from skills/keywords only (no fuzzy responsibility
+ * bonus — that was rewarding long original resumes and causing after < before).
+ */
+export function estimateMatchScore(
+  resume: ResumeCorpusSource,
+  jd: ParsedJobDescription
+): number | null {
+  const terms = weightedJdTerms(jd);
   if (terms.length === 0) return null;
 
+  const corpus = buildResumeCorpus(resume);
   let earned = 0;
   let possible = 0;
   for (const item of terms) {
@@ -109,32 +136,31 @@ export function estimateMatchScore(
       earned += item.weight;
     }
   }
+  return Math.round((earned / possible) * 100);
+}
 
-  const responsibilityHits = jd.responsibilities.filter((item) => {
-    const tokens = item
-      .toLowerCase()
-      .split(/[^a-z0-9+#.]+/)
-      .filter((token) => token.length > 3)
-      .slice(0, 5);
-    if (tokens.length === 0) return false;
-    const hits = tokens.filter((token) => corpus.includes(token)).length;
-    return hits >= Math.min(2, tokens.length);
-  }).length;
-  if (jd.responsibilities.length > 0) {
-    const respWeight = 8;
-    possible += respWeight;
-    earned +=
-      (responsibilityHits / Math.max(jd.responsibilities.length, 1)) * respWeight;
+/** Max honest score if every evidenced term is placed and gaps stay missing. */
+export function estimateFitCeiling(
+  mustPlace: string[],
+  jd: ParsedJobDescription
+): number | null {
+  const terms = weightedJdTerms(jd);
+  if (terms.length === 0) return null;
+
+  const mustSet = new Set(mustPlace.map((t) => t.trim().toLowerCase()));
+  let earned = 0;
+  let possible = 0;
+  for (const item of terms) {
+    possible += item.weight;
+    if (mustSet.has(item.term.trim().toLowerCase())) {
+      earned += item.weight;
+    }
   }
-
   return Math.round((earned / possible) * 100);
 }
 
 export function coverageAgainstTerms(
-  resume: Pick<
-    ParsedResume | TailoredResumeContent,
-    "summary" | "skills" | "experience" | "projects" | "certifications"
-  >,
+  resume: ResumeCorpusSource,
   terms: string[]
 ): { placed: string[]; missing: string[] } {
   const corpus = buildResumeCorpus(resume);
@@ -147,7 +173,11 @@ export function coverageAgainstTerms(
   return { placed, missing };
 }
 
-/** Deterministic grounding self-check (numbers + unsupported new skills). */
+export function placementPercent(placed: number, total: number): number | null {
+  if (total <= 0) return null;
+  return Math.round((placed / total) * 100);
+}
+
 export function verifyGrounding(
   original: ParsedResume,
   tailored: TailoredResumeContent

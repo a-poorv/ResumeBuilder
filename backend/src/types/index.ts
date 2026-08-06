@@ -93,9 +93,16 @@ export interface TailoredResumeContent {
 export interface TailoredResume {
   id: string;
   targetRole: string;
-  /** ATS match on original (pre-tailor) resume corpus */
+  /** Honest JD keyword fit on original resume */
   matchScoreBefore?: number | null;
+  /** Honest JD keyword fit after tailor (never reported below before) */
   matchScore: number | null;
+  /** Max fit if every evidenced term is placed and gaps stay missing */
+  fitCeiling?: number | null;
+  /** % of evidenced JD terms visible in original */
+  placementBefore?: number | null;
+  /** % of evidenced JD terms visible after tailor — this is the lift we own */
+  placementAfter?: number | null;
   atsCoverage?: {
     mustPlace: string[];
     placed: string[];

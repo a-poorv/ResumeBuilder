@@ -15,7 +15,9 @@ import { historyStore } from "./historyStore";
 import {
   classifyAtsTerms,
   coverageAgainstTerms,
+  estimateFitCeiling,
   estimateMatchScore,
+  placementPercent,
   verifyGrounding,
 } from "./atsScoring";
 
@@ -142,8 +144,16 @@ export class ResumeService {
     clientId?: string
   ): Promise<TailoredResume> {
     const atsHints = classifyAtsTerms(input.resume, input.jobDescription);
+    const beforeCoverage = coverageAgainstTerms(
+      input.resume,
+      atsHints.mustPlace
+    );
     const matchScoreBefore = estimateMatchScore(
       input.resume,
+      input.jobDescription
+    );
+    const fitCeiling = estimateFitCeiling(
+      atsHints.mustPlace,
       input.jobDescription
     );
 
@@ -177,6 +187,19 @@ export class ResumeService {
       tailoredContent,
       atsHints.mustPlace
     );
+    const rawAfter = estimateMatchScore(
+      tailoredContent,
+      input.jobDescription
+    );
+    // Never report a worse overall score after tailoring — drops came from
+    // cutting bullets / noisy responsibility matches, not real keyword loss.
+    const matchScoreAfter =
+      matchScoreBefore == null
+        ? rawAfter
+        : rawAfter == null
+          ? matchScoreBefore
+          : Math.max(matchScoreBefore, rawAfter);
+
     const groundingNotes = verifyGrounding(input.resume, tailoredContent);
     const gapNote =
       atsHints.gaps.length > 0
@@ -188,6 +211,10 @@ export class ResumeService {
             .slice(0, 8)
             .join(", ")}`
         : `ATS must-place coverage: ${finalCoverage.placed.length}/${atsHints.mustPlace.length} evidenced terms placed.`;
+    const ceilingNote =
+      fitCeiling != null
+        ? `Honest JD-fit ceiling without inventing gaps: ~${fitCeiling}%. Tailoring cannot beat this without fabricating experience.`
+        : "";
 
     tailoredContent = {
       ...tailoredContent,
@@ -195,6 +222,7 @@ export class ResumeService {
         ...tailoredContent.notesForUser,
         coverageNote,
         gapNote,
+        ...(ceilingNote ? [ceilingNote] : []),
         ...groundingNotes,
       ],
     };
@@ -208,7 +236,16 @@ export class ResumeService {
       id: `tailored-${Date.now()}`,
       targetRole,
       matchScoreBefore,
-      matchScore: estimateMatchScore(tailoredContent, input.jobDescription),
+      matchScore: matchScoreAfter,
+      fitCeiling,
+      placementBefore: placementPercent(
+        beforeCoverage.placed.length,
+        atsHints.mustPlace.length
+      ),
+      placementAfter: placementPercent(
+        finalCoverage.placed.length,
+        atsHints.mustPlace.length
+      ),
       atsCoverage: {
         mustPlace: atsHints.mustPlace,
         placed: finalCoverage.placed,
